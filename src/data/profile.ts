@@ -8,11 +8,11 @@ export const profile = {
   bio: {
     en: {
       short: 'I study how multimodal models learn useful representations and keep adapting as data, tasks, and contexts change.',
-      long: 'I am a second-year M.S. student at the School of Computer Science and Engineering, Beihang University, advised by Prof. Jia Li. My research focuses on multimodal representation learning and continual learning, with Mixture-of-Experts as a unifying architectural lens. I am currently a research intern at Alibaba Group (Taobao & Tmall), where I contribute to the MOON series of multimodal product representation models deployed in search advertising.'
+      long: 'I am a third-year M.S. student at the School of Computer Science and Engineering, Beihang University, advised by Prof. Jia Li. My research focuses on multimodal representation learning and continual learning, with Mixture-of-Experts as a unifying architectural lens. I am currently a research intern at Alibaba Group (Taobao & Tmall), where I contribute to the MOON series of multimodal product representation models deployed in search advertising.'
     },
     zh: {
       short: '我研究多模态模型如何学习有效表征，并在数据、任务和场景持续变化时保持适应能力。',
-      long: '我是北京航空航天大学计算机科学与工程学院二年级硕士研究生，导师为李甲教授。研究方向聚焦多模态表征学习与持续学习，以混合专家（MoE）架构为统一视角。目前在阿里巴巴集团（淘天）搜索广告团队担任研究实习生，参与 MOON 系列多模态商品表征模型的研发。'
+      long: '我是北京航空航天大学计算机科学与工程学院三年级硕士研究生，导师为李甲教授。研究方向聚焦多模态表征学习与持续学习，以混合专家（MoE）架构为统一视角。目前在阿里巴巴集团（淘天）搜索广告团队担任研究实习生，参与 MOON 系列多模态商品表征模型的研发。'
     }
   },
   email: 'NieZH@buaa.edu.cn',
@@ -20,6 +20,9 @@ export const profile = {
   github: 'https://github.com/zhanhengnie',
   huggingface: 'https://huggingface.co/ZHNie',
   orcid: 'https://orcid.org/0009-0007-6313-3504',
+  // Cloudflare Worker backing the Global Visiting Record footer band.
+  // Leave empty to hide the band entirely.
+  visitorApi: 'https://zhanhengnie-visitor-stats.zhanhengnie.workers.dev',
   researchFocus: {
     en: [
       { title: 'Multimodal Representation Learning', desc: 'Building generative MLLM-based models for product understanding at industrial scale' },

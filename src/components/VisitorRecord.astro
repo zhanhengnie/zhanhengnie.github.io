@@ -1,0 +1,217 @@
+---
+import { profile } from '../data/profile';
+
+interface Props {
+  lang: 'en' | 'zh';
+}
+const { lang } = Astro.props;
+
+const t = {
+  en: { title: 'Global Visiting Record', total: 'Total Visits', countries: 'Countries & Regions', you: 'This Visit' },
+  zh: { title: '全球访问记录', total: '总访问量', countries: '国家或地区', you: '本次来自' }
+}[lang];
+---
+
+<section class="visit-record" data-visit-record data-api={profile.visitorApi} data-lang={lang} hidden>
+  <h2 class="visit-title">{t.title}</h2>
+  <div class="visit-stats">
+    <div class="visit-stat">
+      <span class="visit-value" data-visit-total>—</span>
+      <span class="visit-label">{t.total}</span>
+    </div>
+    <div class="visit-stat">
+      <span class="visit-value" data-visit-countries>—</span>
+      <span class="visit-label">{t.countries}</span>
+    </div>
+    <div class="visit-stat" data-visit-you-stat hidden>
+      <span class="visit-value" data-visit-you></span>
+      <span class="visit-label">{t.you}</span>
+    </div>
+  </div>
+  <p class="visit-flags" data-visit-flags></p>
+</section>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-visit-record]');
+  const api = root?.dataset.api?.replace(/\/+$/, '');
+
+  if (root && api) {
+    const locale = root.dataset.lang === 'zh' ? 'zh-CN' : 'en';
+    const MAX_FLAGS = 12;
+    const SESSION_KEY = 'gvr-counted';
+
+    const regionNames = (() => {
+      try {
+        return new Intl.DisplayNames([locale], { type: 'region' });
+      } catch {
+        return null;
+      }
+    })();
+
+    // CLDR renders TW as a bare "Taiwan" / "台湾", so pin it explicitly. HK and
+    // MO already carry their official CLDR names and are left untouched.
+    const REGION_OVERRIDES: Record<string, Record<string, string>> = {
+      en: { TW: 'Taiwan, China' },
+      'zh-CN': { TW: '中国台湾' }
+    };
+
+    const nameOf = (code: string) => {
+      const override = REGION_OVERRIDES[locale]?.[code];
+      if (override) return override;
+      try {
+        return regionNames?.of(code) ?? code;
+      } catch {
+        return code;
+      }
+    };
+
+    /** ISO 3166-1 alpha-2 -> regional indicator flag emoji. */
+    const flagOf = (code: string) =>
+      /^[A-Z]{2}$/.test(code)
+        ? String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
+        : '';
+
+    const setText = (selector: string, value: string) => {
+      const el = root.querySelector<HTMLElement>(selector);
+      if (el) el.textContent = value;
+    };
+
+    const render = (data: any) => {
+      setText('[data-visit-total]', Number(data.total ?? 0).toLocaleString(locale));
+      setText('[data-visit-countries]', Number(data.countries ?? 0).toLocaleString(locale));
+
+      const you = data.you?.country;
+      const youStat = root.querySelector<HTMLElement>('[data-visit-you-stat]');
+      if (youStat && you) {
+        setText('[data-visit-you]', `${flagOf(you)} ${nameOf(you)}`.trim());
+        youStat.hidden = false;
+      }
+
+      const flags = root.querySelector<HTMLElement>('[data-visit-flags]');
+      const list: { code: string }[] = Array.isArray(data.countryList) ? data.countryList : [];
+      if (flags && list.length) {
+        flags.textContent = '';
+        for (const { code } of list.slice(0, MAX_FLAGS)) {
+          const span = document.createElement('span');
+          span.className = 'visit-flag';
+          span.textContent = flagOf(code);
+          span.title = nameOf(code);
+          flags.append(span);
+        }
+        if (list.length > MAX_FLAGS) {
+          const more = document.createElement('span');
+          more.className = 'visit-more';
+          more.textContent = `+${list.length - MAX_FLAGS}`;
+          flags.append(more);
+        }
+      }
+
+      root.hidden = false;
+    };
+
+    // Count once per browser session; later page views only read the totals.
+    let counted = false;
+    try {
+      counted = sessionStorage.getItem(SESSION_KEY) === '1';
+    } catch {
+      counted = false;
+    }
+
+    const request = counted
+      ? fetch(`${api}/api/stats`)
+      : fetch(`${api}/api/visit`, { method: 'POST' });
+
+    request
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((data) => {
+        if (!counted) {
+          try {
+            sessionStorage.setItem(SESSION_KEY, '1');
+          } catch {
+            /* private mode: fall through, worst case we count twice */
+          }
+        }
+        render(data);
+      })
+      .catch(() => {
+        /* Stats are decorative: stay hidden rather than show a broken band. */
+      });
+  }
+</script>
+
+<style>
+  .visit-record {
+    margin-bottom: var(--spacing-sm);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--soft-sage);
+  }
+  .visit-title {
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--slate);
+    margin-bottom: 0.55rem;
+  }
+  .visit-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: 0.35rem var(--spacing-md);
+  }
+  .visit-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    position: relative;
+  }
+  .visit-stat + .visit-stat::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--spacing-md) / -2);
+    top: 0.15em;
+    bottom: 0.15em;
+    border-left: 1px solid var(--soft-sage);
+  }
+  .visit-value {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--route-blue);
+    line-height: 1.2;
+  }
+  .visit-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slate);
+  }
+  .visit-flags {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.3rem;
+    line-height: 1;
+  }
+  .visit-flag {
+    font-size: 0.95rem;
+    cursor: default;
+  }
+  .visit-more {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--slate);
+  }
+  @media (max-width: 768px) {
+    .visit-stats {
+      gap: 0.35rem var(--spacing-sm);
+    }
+    .visit-stat + .visit-stat::before {
+      left: calc(var(--spacing-sm) / -2);
+    }
+  }
+</style>
