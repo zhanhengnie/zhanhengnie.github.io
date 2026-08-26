@@ -157,17 +157,37 @@ const t = {
 
     // ---- Source 1: page-view tally. Reachable from mainland China, so this
     // keeps the band alive even when the geo Worker is blocked. ----
+
+    // Unique visitors are deduplicated on the client, the same way the official
+    // vercount script does it: a first-party cookie marks this browser as seen,
+    // and `isNewUv` tells the server whether to count a new visitor. Without the
+    // flag the server never moves site_uv at all.
+    const uvCookie = 'vercount_uv_' + location.host.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const readCookie = (name: string) => {
+      const hit = document.cookie.split('; ').find((c) => c.startsWith(`${name}=`));
+      return hit ? hit.slice(name.length + 1) : null;
+    };
+
     async function loadTally() {
       if (!tallyApi) return;
-      const res = await fetch(`${tallyApi}/log`, {
+      const isNewUv = readCookie(uvCookie) !== '1';
+      if (isNewUv) {
+        document.cookie = `${uvCookie}=1; path=/; max-age=31536000; samesite=lax`;
+      }
+
+      const res = await fetch(`${tallyApi}/api/v2/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: location.href })
+        body: JSON.stringify({ url: location.href, isNewUv })
       });
       if (!res.ok) throw new Error(String(res.status));
-      const d = await res.json();
-      if (typeof d.site_pv === 'number') fill('total', '[data-visit-total]', num(d.site_pv));
-      if (d.site_uv > 0) fill('uv', '[data-visit-uv]', num(d.site_uv));
+      const raw = await res.json();
+      // v2 nests the numbers under `data`; the legacy endpoint returns them flat.
+      const d = raw?.data ?? raw;
+      if (Number.isFinite(Number(d?.site_pv))) {
+        fill('total', '[data-visit-total]', num(d.site_pv));
+      }
+      if (Number(d?.site_uv) > 0) fill('uv', '[data-visit-uv]', num(d.site_uv));
     }
 
     // ---- Source 2: our own Worker + D1. Supplies everything geographic. ----
