@@ -48,11 +48,12 @@ const t = {
       }
     })();
 
-    // CLDR renders TW as a bare "Taiwan" / "台湾", so pin it explicitly. HK and
-    // MO already carry their official CLDR names and are left untouched.
+    // Browser ICU versions disagree with each other here: some return the CLDR
+    // short form ("香港" / "Hong Kong") for style:'long'. Pin these explicitly so
+    // the official names render identically everywhere.
     const REGION_OVERRIDES: Record<string, Record<string, string>> = {
-      en: { TW: 'Taiwan, China' },
-      'zh-CN': { TW: '中国台湾' }
+      en: { TW: 'Taiwan, China', HK: 'Hong Kong SAR China', MO: 'Macao SAR China' },
+      'zh-CN': { TW: '中国台湾', HK: '中国香港特别行政区', MO: '中国澳门特别行政区' }
     };
 
     const nameOf = (code: string) => {
@@ -65,9 +66,12 @@ const t = {
       }
     };
 
+    /** Regions rendered without a flag emoji; the name alone carries the label. */
+    const NO_FLAG = new Set(['TW']);
+
     /** ISO 3166-1 alpha-2 -> regional indicator flag emoji. */
     const flagOf = (code: string) =>
-      /^[A-Z]{2}$/.test(code)
+      !NO_FLAG.has(code) && /^[A-Z]{2}$/.test(code)
         ? String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
         : '';
 
@@ -91,17 +95,21 @@ const t = {
       const list: { code: string }[] = Array.isArray(data.countryList) ? data.countryList : [];
       if (flags && list.length) {
         flags.textContent = '';
-        for (const { code } of list.slice(0, MAX_FLAGS)) {
+        // Skip flagless regions rather than leaving an empty slot; they fall
+        // into the "+N" remainder instead.
+        const shown = list.filter(({ code }) => flagOf(code)).slice(0, MAX_FLAGS);
+        for (const { code } of shown) {
           const span = document.createElement('span');
           span.className = 'visit-flag';
           span.textContent = flagOf(code);
           span.title = nameOf(code);
           flags.append(span);
         }
-        if (list.length > MAX_FLAGS) {
+        const remainder = list.length - shown.length;
+        if (remainder > 0) {
           const more = document.createElement('span');
           more.className = 'visit-more';
-          more.textContent = `+${list.length - MAX_FLAGS}`;
+          more.textContent = `+${remainder}`;
           flags.append(more);
         }
       }
