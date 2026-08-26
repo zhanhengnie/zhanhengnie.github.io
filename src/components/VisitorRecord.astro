@@ -7,37 +7,76 @@ interface Props {
 const { lang } = Astro.props;
 
 const t = {
-  en: { title: 'Global Visiting Record', total: 'Total Visits', countries: 'Countries & Regions', you: 'This Visit' },
-  zh: { title: '全球访问记录', total: '总访问量', countries: '国家或地区', you: '本次来自' }
+  en: {
+    title: 'Global Visiting Record',
+    total: 'Total Visits',
+    uv: 'Visitors',
+    today: 'Today',
+    countries: 'Countries & Regions',
+    you: 'This Visit',
+    recent: 'Recently from'
+  },
+  zh: {
+    title: '全球访问记录',
+    total: '总访问量',
+    uv: '访客数',
+    today: '今日访问',
+    countries: '国家或地区',
+    you: '本次来自',
+    recent: '最近来访'
+  }
 }[lang];
 ---
 
-<section class="visit-record" data-visit-record data-api={profile.visitorApi} data-lang={lang} hidden>
+<section
+  class="visit-record"
+  data-visit-record
+  data-api={profile.visitorApi}
+  data-tally={profile.visitorTallyApi}
+  data-lang={lang}
+  hidden
+>
   <h2 class="visit-title">{t.title}</h2>
-  <div class="visit-stats">
-    <div class="visit-stat">
-      <span class="visit-value" data-visit-total>—</span>
-      <span class="visit-label">{t.total}</span>
-    </div>
-    <div class="visit-stat">
-      <span class="visit-value" data-visit-countries>—</span>
-      <span class="visit-label">{t.countries}</span>
-    </div>
-    <div class="visit-stat" data-visit-you-stat hidden>
-      <span class="visit-value" data-visit-you></span>
-      <span class="visit-label">{t.you}</span>
-    </div>
+  <div class="visit-loading" data-visit-loading>
+    <div class="visit-spinner" aria-hidden="true"></div>
   </div>
-  <p class="visit-flags" data-visit-flags></p>
+  <div class="visit-body" data-visit-body hidden>
+    <div class="visit-stats">
+      <div class="visit-stat" data-cell="total" hidden>
+        <span class="visit-value" data-visit-total>—</span>
+        <span class="visit-label">{t.total}</span>
+      </div>
+      <div class="visit-stat" data-cell="uv" hidden>
+        <span class="visit-value" data-visit-uv>—</span>
+        <span class="visit-label">{t.uv}</span>
+      </div>
+      <div class="visit-stat" data-cell="today" hidden>
+        <span class="visit-value" data-visit-today>—</span>
+        <span class="visit-label">{t.today}</span>
+      </div>
+      <div class="visit-stat" data-cell="countries" hidden>
+        <span class="visit-value" data-visit-countries>—</span>
+        <span class="visit-label">{t.countries}</span>
+      </div>
+      <div class="visit-stat" data-cell="you" hidden>
+        <span class="visit-value" data-visit-you></span>
+        <span class="visit-label">{t.you}</span>
+      </div>
+    </div>
+    <p class="visit-top" data-visit-top hidden></p>
+    <p class="visit-recent" data-visit-recent hidden><span class="visit-recent-label">{t.recent}</span></p>
+  </div>
 </section>
 
 <script>
   const root = document.querySelector<HTMLElement>('[data-visit-record]');
-  const api = root?.dataset.api?.replace(/\/+$/, '');
 
-  if (root && api) {
+  if (root) {
+    const geoApi = root.dataset.api?.replace(/\/+$/, '') ?? '';
+    const tallyApi = root.dataset.tally?.replace(/\/+$/, '') ?? '';
     const locale = root.dataset.lang === 'zh' ? 'zh-CN' : 'en';
-    const MAX_FLAGS = 12;
+    const TOP_N = 10;
+    const RECENT_N = 5;
     const SESSION_KEY = 'gvr-counted';
 
     const regionNames = (() => {
@@ -48,9 +87,8 @@ const t = {
       }
     })();
 
-    // Browser ICU versions disagree with each other here: some return the CLDR
-    // short form ("香港" / "Hong Kong") for style:'long'. Pin these explicitly so
-    // the official names render identically everywhere.
+    // Browser ICU versions disagree here: some return the CLDR short form
+    // ("香港" / "Hong Kong"). Pin these so official names render everywhere.
     const REGION_OVERRIDES: Record<string, Record<string, string>> = {
       en: { TW: 'Taiwan, China', HK: 'Hong Kong SAR China', MO: 'Macao SAR China' },
       'zh-CN': { TW: '中国台湾', HK: '中国香港特别行政区', MO: '中国澳门特别行政区' }
@@ -75,79 +113,159 @@ const t = {
         ? String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
         : '';
 
-    const setText = (selector: string, value: string) => {
-      const el = root.querySelector<HTMLElement>(selector);
-      if (el) el.textContent = value;
+    const num = (n: unknown) => Number(n ?? 0).toLocaleString(locale);
+
+    // Show the title with a full-width spinner immediately, hold it for a fixed
+    // beat, then swap the whole body in at once. Data that lands later than the
+    // hold simply reveals as soon as it arrives.
+    const SPIN_MS = 3000;
+    const GIVE_UP = 12000;
+    const loading = root.querySelector<HTMLElement>('[data-visit-loading]');
+    const body = root.querySelector<HTMLElement>('[data-visit-body]');
+    const startedAt = Date.now();
+    let gotAnything = false;
+    let revealTimer: number | undefined;
+
+    root.hidden = false;
+
+    const scheduleReveal = () => {
+      if (revealTimer !== undefined) return;
+      revealTimer = window.setTimeout(
+        () => {
+          if (loading) loading.hidden = true;
+          if (body) body.hidden = false;
+        },
+        Math.max(0, SPIN_MS - (Date.now() - startedAt))
+      );
     };
 
-    const render = (data: any) => {
-      setText('[data-visit-total]', Number(data.total ?? 0).toLocaleString(locale));
-      setText('[data-visit-countries]', Number(data.countries ?? 0).toLocaleString(locale));
+    // Nothing at all arrived: hide the band rather than spin forever.
+    setTimeout(() => {
+      if (!gotAnything) root.hidden = true;
+    }, GIVE_UP);
 
-      const you = data.you?.country;
-      const youStat = root.querySelector<HTMLElement>('[data-visit-you-stat]');
-      if (youStat && you) {
-        setText('[data-visit-you]', `${flagOf(you)} ${nameOf(you)}`.trim());
-        youStat.hidden = false;
+    /** Fill a cell's value and reveal it. */
+    const fill = (cell: string, selector: string, value: string) => {
+      const el = root.querySelector<HTMLElement>(selector);
+      const wrap = root.querySelector<HTMLElement>(`[data-cell="${cell}"]`);
+      if (el) el.textContent = value;
+      if (wrap) wrap.hidden = false;
+      gotAnything = true;
+      root.hidden = false;
+      scheduleReveal();
+    };
+
+    // ---- Source 1: page-view tally. Reachable from mainland China, so this
+    // keeps the band alive even when the geo Worker is blocked. ----
+    async function loadTally() {
+      if (!tallyApi) return;
+      const res = await fetch(`${tallyApi}/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: location.href })
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const d = await res.json();
+      if (typeof d.site_pv === 'number') fill('total', '[data-visit-total]', num(d.site_pv));
+      if (d.site_uv > 0) fill('uv', '[data-visit-uv]', num(d.site_uv));
+    }
+
+    // ---- Source 2: our own Worker + D1. Supplies everything geographic. ----
+    async function loadGeo() {
+      if (!geoApi) return;
+
+      let counted = false;
+      try {
+        counted = sessionStorage.getItem(SESSION_KEY) === '1';
+      } catch {
+        counted = false;
       }
 
-      const flags = root.querySelector<HTMLElement>('[data-visit-flags]');
-      const list: { code: string }[] = Array.isArray(data.countryList) ? data.countryList : [];
-      if (flags && list.length) {
-        flags.textContent = '';
+      const res = counted
+        ? await fetch(`${geoApi}/api/stats`)
+        : await fetch(`${geoApi}/api/visit`, { method: 'POST' });
+      if (!res.ok) throw new Error(String(res.status));
+      const d = await res.json();
+
+      if (!counted) {
+        try {
+          sessionStorage.setItem(SESSION_KEY, '1');
+        } catch {
+          /* private mode: worst case this visit is counted twice */
+        }
+      }
+
+      fill('today', '[data-visit-today]', num(d.today));
+      fill('countries', '[data-visit-countries]', num(d.countries));
+
+      const you = d.you?.country;
+      if (you) fill('you', '[data-visit-you]', `${flagOf(you)} ${nameOf(you)}`.trim());
+
+      // Flag strip: China pinned first, everything else by real visit count.
+      const list: { code: string; visits: number }[] = Array.isArray(d.countryList)
+        ? d.countryList
+        : [];
+      const top = root.querySelector<HTMLElement>('[data-visit-top]');
+      if (top && list.length) {
+        top.textContent = '';
         // Skip flagless regions rather than leaving an empty slot; they fall
         // into the "+N" remainder instead.
-        const shown = list.filter(({ code }) => flagOf(code)).slice(0, MAX_FLAGS);
+        const withFlag = list.filter(({ code }) => flagOf(code));
+        const ordered = [
+          ...withFlag.filter(({ code }) => code === 'CN'),
+          ...withFlag.filter(({ code }) => code !== 'CN')
+        ];
+        const shown = ordered.slice(0, TOP_N);
         for (const { code } of shown) {
-          const span = document.createElement('span');
-          span.className = 'visit-flag';
-          span.textContent = flagOf(code);
-          span.title = nameOf(code);
-          flags.append(span);
+          const item = document.createElement('span');
+          item.className = 'visit-flag';
+          item.title = nameOf(code);
+          item.textContent = flagOf(code);
+          top.append(item);
         }
         const remainder = list.length - shown.length;
         if (remainder > 0) {
           const more = document.createElement('span');
           more.className = 'visit-more';
           more.textContent = `+${remainder}`;
-          flags.append(more);
+          top.append(more);
         }
+        top.hidden = false;
+      }
+
+      // Most recent distinct cities. Regions we render no flag for are dropped
+      // and the next ones move up, so the row stays full.
+      const recentRows: { country: string; city: string }[] = Array.isArray(d.recent)
+        ? d.recent
+        : [];
+      const recent = root.querySelector<HTMLElement>('[data-visit-recent]');
+      const shownRecent = recentRows.filter(({ country }) => flagOf(country)).slice(0, RECENT_N);
+      if (recent && shownRecent.length) {
+        for (const { country, city } of shownRecent) {
+          const item = document.createElement('span');
+          item.className = 'visit-city';
+          item.title = nameOf(country);
+          item.textContent = `${flagOf(country)} ${city}`.trim();
+          recent.append(item);
+        }
+        recent.hidden = false;
       }
 
       root.hidden = false;
-    };
-
-    // Count once per browser session; later page views only read the totals.
-    let counted = false;
-    try {
-      counted = sessionStorage.getItem(SESSION_KEY) === '1';
-    } catch {
-      counted = false;
     }
 
-    const request = counted
-      ? fetch(`${api}/api/stats`)
-      : fetch(`${api}/api/visit`, { method: 'POST' });
-
-    request
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((data) => {
-        if (!counted) {
-          try {
-            sessionStorage.setItem(SESSION_KEY, '1');
-          } catch {
-            /* private mode: fall through, worst case we count twice */
-          }
-        }
-        render(data);
-      })
-      .catch(() => {
-        /* Stats are decorative: stay hidden rather than show a broken band. */
-      });
+    // Independent so one blocked source never hides the other's numbers.
+    loadTally().catch(() => {});
+    loadGeo().catch(() => {});
   }
 </script>
 
 <style>
+  /* Author-level `display` beats the UA stylesheet's [hidden] rule, so the
+     per-cell degradation needs this to actually take effect. */
+  [hidden] {
+    display: none !important;
+  }
   .visit-record {
     margin-bottom: var(--spacing-sm);
     padding-bottom: var(--spacing-sm);
@@ -162,6 +280,37 @@ const t = {
     color: var(--slate);
     margin-bottom: 0.55rem;
   }
+  /* Matches the measured height of the body it stands in for (~96px), so
+     swapping the two does not shift the footer. */
+  .visit-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 6rem;
+  }
+  .visit-spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid var(--soft-sage);
+    border-top-color: var(--route-blue);
+    border-radius: 50%;
+    animation: visit-spin 0.75s linear infinite;
+  }
+  @keyframes visit-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes visit-pulse {
+    50% {
+      opacity: 0.3;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .visit-spinner {
+      animation: visit-pulse 1.4s ease-in-out infinite;
+    }
+  }
   .visit-stats {
     display: flex;
     flex-wrap: wrap;
@@ -175,7 +324,9 @@ const t = {
     gap: 0.4rem;
     position: relative;
   }
-  .visit-stat + .visit-stat::before {
+  /* `~` not `+`: a hidden cell in between must not suppress the divider, and
+     the first *visible* cell must not get a leading one. */
+  .visit-stat:not([hidden]) ~ .visit-stat:not([hidden])::before {
     content: '';
     position: absolute;
     left: calc(var(--spacing-md) / -2);
@@ -196,8 +347,8 @@ const t = {
     letter-spacing: 0.04em;
     color: var(--slate);
   }
-  .visit-flags {
-    margin-top: 0.5rem;
+  .visit-top {
+    margin-top: 0.55rem;
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -214,11 +365,29 @@ const t = {
     font-size: 0.72rem;
     color: var(--slate);
   }
+  .visit-recent {
+    margin-top: 0.45rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.2rem 0.6rem;
+    font-size: 0.72rem;
+    color: var(--slate);
+  }
+  .visit-recent-label {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.75;
+  }
+  .visit-city {
+    cursor: default;
+  }
   @media (max-width: 768px) {
     .visit-stats {
       gap: 0.35rem var(--spacing-sm);
     }
-    .visit-stat + .visit-stat::before {
+    .visit-stat:not([hidden]) ~ .visit-stat:not([hidden])::before {
       left: calc(var(--spacing-sm) / -2);
     }
   }

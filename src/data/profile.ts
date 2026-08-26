@@ -21,8 +21,12 @@ export const profile = {
   huggingface: 'https://huggingface.co/ZHNie',
   orcid: 'https://orcid.org/0009-0007-6313-3504',
   // Cloudflare Worker backing the Global Visiting Record footer band.
-  // Leave empty to hide the band entirely.
+  // Supplies the geographic stats; blocked in mainland China, so the band
+  // degrades per-cell when it is unreachable.
   visitorApi: 'https://zhanhengnie-visitor-stats.zhanhengnie.workers.dev',
+  // Page-view tally (Vercount). Reachable from mainland China, so total visits
+  // and visitor count stay live even when the Worker above is not.
+  visitorTallyApi: 'https://cn.vercount.one',
   researchFocus: {
     en: [
       { title: 'Multimodal Representation Learning', desc: 'Building generative MLLM-based models for product understanding at industrial scale' },
