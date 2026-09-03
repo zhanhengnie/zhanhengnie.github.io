@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://zhanhengnie.github.io/sitemap-index.xml

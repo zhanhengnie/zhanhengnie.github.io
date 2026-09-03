@@ -6,14 +6,26 @@ interface Props {
 }
 
 const { title, lang, description } = Astro.props;
+
+// `site` is set in astro.config.mjs; the fallback only matters for odd dev setups.
+const site = Astro.site ?? new URL('https://zhanhengnie.github.io');
+const canonical = new URL(Astro.url.pathname, site);
+// Both pages advertise the full set, which is what reciprocal hreflang requires.
+const alternates = [
+  { hreflang: 'en', href: new URL('/', site) },
+  { hreflang: 'zh-Hans', href: new URL('/zh/', site) },
+  { hreflang: 'x-default', href: new URL('/', site) }
+];
 ---
 <!DOCTYPE html>
-<html lang={lang}>
+<html lang={lang === 'zh' ? 'zh-Hans' : 'en'}>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content={description} />
   <title>{title}</title>
+  <link rel="canonical" href={canonical.href} />
+  {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href.href} />)}
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
