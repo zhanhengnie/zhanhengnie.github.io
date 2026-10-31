@@ -71,6 +71,15 @@ const { lang } = Astro.props;
                 <p class="record-period">Sep 2019 — Jun 2024</p>
               </div>
             </div>
+            <div class="education-language">
+              <p class="language-overall"><strong>{lang === 'en' ? 'IELTS Overall' : '雅思总分'} {profile.ielts.overall.toFixed(1)}</strong></p>
+              <ul class="language-scores" aria-label={lang === 'en' ? 'IELTS component scores' : '雅思单项成绩'}>
+                <li>{lang === 'en' ? 'Listening' : '听力'} {profile.ielts.listening.toFixed(1)}</li>
+                <li>{lang === 'en' ? 'Reading' : '阅读'} {profile.ielts.reading.toFixed(1)}</li>
+                <li>{lang === 'en' ? 'Writing' : '写作'} {profile.ielts.writing.toFixed(1)}</li>
+                <li>{lang === 'en' ? 'Speaking' : '口语'} {profile.ielts.speaking.toFixed(1)}</li>
+              </ul>
+            </div>
           </div>
           <div class="record-group">
             <h3>{lang === 'en' ? 'Internship' : '实习经历'}</h3>
@@ -232,6 +241,27 @@ const { lang } = Astro.props;
     font-family: var(--font-mono);
     font-size: 0.75rem;
     color: var(--slate);
+  }
+  .education-language {
+    margin-top: var(--spacing-sm);
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--soft-sage);
+  }
+  .language-overall {
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+  .language-scores {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.75rem;
+    list-style: none;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--slate);
+  }
+  .language-scores li {
+    white-space: nowrap;
   }
   .hero-actions {
     display: flex;
