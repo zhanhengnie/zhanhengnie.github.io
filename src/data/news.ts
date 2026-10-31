@@ -6,6 +6,14 @@ export interface NewsItem {
 
 export const news: NewsItem[] = [
   {
+    date: 'Sep. 2026',
+    type: 'Research',
+    content: {
+      en: '<b>1 paper</b> accepted by <b>ICXR 2026</b>',
+      zh: '<b>1 篇论文</b>被 <b>ICXR 2026</b> 录用'
+    }
+  },
+  {
     date: 'Jul. 2026',
     type: 'Research',
     content: {

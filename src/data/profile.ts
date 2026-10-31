@@ -16,6 +16,13 @@ export const profile = {
     }
   },
   email: 'NieZH@buaa.edu.cn',
+  ielts: {
+    overall: 7.0,
+    listening: 7.0,
+    reading: 8.0,
+    writing: 6.5,
+    speaking: 6.0
+  },
   scholar: 'https://scholar.google.com/citations?user=Kj35CWsAAAAJ&hl=en',
   github: 'https://github.com/zhanhengnie',
   huggingface: 'https://huggingface.co/ZHNie',

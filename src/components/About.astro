@@ -15,6 +15,14 @@ const { lang } = Astro.props;
     <div class="about-grid">
       <div class="about-bio">
         <p>{profile.bio[lang].long}</p>
+        <p class="about-ielts">
+          <strong>{lang === 'en' ? 'IELTS Overall' : '雅思总分'}: {profile.ielts.overall.toFixed(1)}</strong>
+          <br />
+          {lang === 'en' ? 'Listening' : '听力'} {profile.ielts.listening.toFixed(1)} ·{' '}
+          {lang === 'en' ? 'Reading' : '阅读'} {profile.ielts.reading.toFixed(1)} ·{' '}
+          {lang === 'en' ? 'Writing' : '写作'} {profile.ielts.writing.toFixed(1)} ·{' '}
+          {lang === 'en' ? 'Speaking' : '口语'} {profile.ielts.speaking.toFixed(1)}
+        </p>
         <p class="about-interest">
           {lang === 'en'
             ? 'I am actively seeking PhD opportunities for Fall 2027. If you are interested in collaboration or have openings in related research areas, please feel free to reach out.'
