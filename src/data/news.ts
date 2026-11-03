@@ -6,6 +6,14 @@ export interface NewsItem {
 
 export const news: NewsItem[] = [
   {
+    date: 'Nov. 2026',
+    type: 'Research',
+    content: {
+      en: '<b>1 patent</b> granted',
+      zh: '<b>1 项专利</b>获授权'
+    }
+  },
+  {
     date: 'Sep. 2026',
     type: 'Research',
     content: {
